@@ -3,7 +3,7 @@ import { useNavigate } from "react-router-dom";
 import { useAuthStore } from "../store/authStore";
 import { useSessionStore } from "../store/sessionStore";
 import { apiFetch } from "../lib/apiClient";
-import { Button, Card, ThemeToggle } from "../components";
+import { Button, Card, ThemeToggle, Loader, Modal } from "../components";
 
 export default function DashboardPage() {
   const navigate = useNavigate();
@@ -26,15 +26,24 @@ export default function DashboardPage() {
       status?: string | null;
     }>
   >([]);
+  const [deletingSessionId, setDeletingSessionId] = React.useState<string | null>(null);
+  const [isLoading, setIsLoading] = React.useState(true);
+  const [deleteModalOpen, setDeleteModalOpen] = React.useState(false);
+  const [sessionToDelete, setSessionToDelete] = React.useState<string | null>(null);
 
   React.useEffect(() => {
     let alive = true;
     (async () => {
+      setIsLoading(true);
       try {
         const res = await apiFetch<{ items: any[] }>("/api/history", { accessToken, method: "GET" });
-        if (alive) setItems(res.items || []);
+        if (alive) {
+          setItems(res.items || []);
+        }
       } catch {
         // Keep dashboard usable even if history is temporarily unavailable.
+      } finally {
+        if (alive) setIsLoading(false);
       }
     })();
     return () => {
@@ -71,6 +80,40 @@ export default function DashboardPage() {
     clearHistory();
     setSessionId(sessionId);
     navigate(`/interview/${sessionId}`);
+  }
+
+  function openDeleteModal(sessionId: string) {
+    setSessionToDelete(sessionId);
+    setDeleteModalOpen(true);
+  }
+
+  async function confirmDeleteSession() {
+    if (!sessionToDelete) return;
+    
+    setDeletingSessionId(sessionToDelete);
+    
+    try {
+      await apiFetch(`/api/sessions/${sessionToDelete}`, { 
+        accessToken, 
+        method: "DELETE" 
+      });
+      setItems((prev) => prev.filter((item) => item.sessionId !== sessionToDelete));
+      setDeleteModalOpen(false);
+    } catch (error) {
+      console.error("Failed to delete session:", error);
+      alert("Failed to delete session. Please try again.");
+    } finally {
+      setDeletingSessionId(null);
+      setSessionToDelete(null);
+    }
+  }
+
+  if (isLoading) {
+    return (
+      <div className="h-screen bg-bg-primary flex items-center justify-center">
+        <Loader text="Loading dashboard..." />
+      </div>
+    );
   }
 
   return (
@@ -129,7 +172,7 @@ export default function DashboardPage() {
                       <th className="p-4 font-medium text-text-secondary">Mode</th>
                       <th className="p-4 font-medium text-text-secondary">Difficulty</th>
                       <th className="p-4 font-medium text-text-secondary">Started</th>
-                      <th className="p-4 font-medium text-text-secondary">Action</th>
+                      <th className="p-4 font-medium text-text-secondary">Actions</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -157,13 +200,24 @@ export default function DashboardPage() {
                           {s.startedAt ? new Date(s.startedAt).toLocaleDateString() : "—"}
                         </td>
                         <td className="p-4">
-                          <Button
-                            variant="primary"
-                            size="sm"
-                            onClick={() => resumeSession(s.sessionId)}
-                          >
-                            Resume Interview
-                          </Button>
+                          <div className="flex gap-2">
+                            <Button
+                              variant="primary"
+                              size="sm"
+                              onClick={() => resumeSession(s.sessionId)}
+                            >
+                              Resume
+                            </Button>
+                            <Button
+                              variant="secondary"
+                              size="sm"
+                              onClick={() => openDeleteModal(s.sessionId)}
+                              disabled={deletingSessionId === s.sessionId}
+                              className="text-status-error border-status-error hover:bg-status-error hover:text-white"
+                            >
+                              {deletingSessionId === s.sessionId ? "..." : "Delete"}
+                            </Button>
+                          </div>
                         </td>
                       </tr>
                     ))}
@@ -188,7 +242,7 @@ export default function DashboardPage() {
                     <th className="p-4 font-medium text-text-secondary">Difficulty</th>
                     <th className="p-4 font-medium text-text-secondary">Date</th>
                     <th className="p-4 font-medium text-text-secondary">Score</th>
-                    <th className="p-4 font-medium text-text-secondary">Action</th>
+                    <th className="p-4 font-medium text-text-secondary">Actions</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -219,14 +273,25 @@ export default function DashboardPage() {
                         </span>
                       </td>
                       <td className="p-4">
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          onClick={() => navigate(`/report/${s.sessionId}`)}
-                          disabled={typeof s.overallScore !== "number"}
-                        >
-                          View Feedback
-                        </Button>
+                        <div className="flex gap-2">
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => navigate(`/report/${s.sessionId}`)}
+                            disabled={typeof s.overallScore !== "number"}
+                          >
+                            View
+                          </Button>
+                          <Button
+                            variant="secondary"
+                            size="sm"
+                            onClick={() => openDeleteModal(s.sessionId)}
+                            disabled={deletingSessionId === s.sessionId}
+                            className="text-status-error border-status-error hover:bg-status-error hover:text-white"
+                          >
+                            {deletingSessionId === s.sessionId ? "..." : "Delete"}
+                          </Button>
+                        </div>
                       </td>
                     </tr>
                   ))}
@@ -243,6 +308,18 @@ export default function DashboardPage() {
           </Card>
         </section>
       </main>
+
+      <Modal
+        isOpen={deleteModalOpen}
+        onClose={() => setDeleteModalOpen(false)}
+        onConfirm={confirmDeleteSession}
+        title="Delete Interview Session"
+        message={deletingSessionId ? "Deleting interview session..." : "Are you sure you want to delete this interview session? This action cannot be undone."}
+        confirmText="Delete"
+        cancelText="Cancel"
+        variant="danger"
+        isLoading={deletingSessionId !== null}
+      />
     </div>
   );
 }

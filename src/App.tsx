@@ -6,10 +6,11 @@ import ConfigureSessionPage from "./pages/ConfigureSessionPage";
 import LiveInterviewPage from "./pages/LiveInterviewPage";
 import PerformanceReportPage from "./pages/PerformanceReportPage";
 import { useAuth } from "./hooks/useAuth";
+import { Loader } from "./components";
 
 function RequireAuth({ children }: { children: React.ReactNode }) {
   const { isAuthenticated, isLoading } = useAuth();
-  if (isLoading) return <div>Loading...</div>;
+  if (isLoading) return <Loader fullScreen text="Loading..." />;
   if (!isAuthenticated) return <Navigate to="/" replace />;
   return <>{children}</>;
 }
@@ -18,7 +19,7 @@ export default function App() {
   const { isAuthenticated, isLoading } = useAuth();
   
   if (isLoading) {
-    return <div>Loading...</div>;
+    return <Loader fullScreen text="Loading..." />;
   }
 
   return (
